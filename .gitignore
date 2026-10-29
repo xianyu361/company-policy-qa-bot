@@ -1,0 +1,16 @@
+# 密钥：绝不入库，避免 API Key 泄露
+.env
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# 向量库：本地可重建，体积大且含二进制，不入库
+chroma_db/
+
+# 编辑器配置
+.vscode/
+
+# Gitee 干净副本（本地保留，不入库）
+upload-to-gitee/
