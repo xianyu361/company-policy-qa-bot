@@ -1,22 +1,12 @@
-"""
-小项目：公司制度问答机器人（整合 Step 1~4 全部能力）
-  - RAG：从公司制度资料里检索相关段落再回答
-  - 工具调用：算年假天数、查当前时间
-  - 多轮对话 + 记忆
-运行前: pip install chromadb sentence-transformers
-运行:   python policy_bot.py
-"""
 import datetime
 import json
 import os
 import sys
 
-# 国内访问 HuggingFace 常被墙，设置镜像以下载嵌入模型 bge-small-zh
 os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
 
 import requests
 from chromadb.utils import embedding_functions
-
 
 def load_env_file():
     """如果脚本同目录存在 .env，就把里面的 KEY=VALUE 读进环境变量（不覆盖已存在的）。"""
@@ -34,8 +24,6 @@ def load_env_file():
             if key and key not in os.environ:
                 os.environ[key] = value
 
-
-# 先尝试从 .env 读取 Key（系统环境变量优先级更高）
 load_env_file()
 API_KEY = os.getenv("DEEPSEEK_API_KEY")
 if not API_KEY:
@@ -45,7 +33,6 @@ if not API_KEY:
     print('  B) 在终端执行： $env:DEEPSEEK_API_KEY="你的key"')
     sys.exit(1)
 
-# ---------- 1) 知识库（真实场景换成读你的 txt/md/pdf） ----------
 POLICY = [
     "年假：入职满1年享5天，满3年10天，满10年15天。",
     "报销：提交发票 -> 直属领导审批 -> 财务7个工作日内打款。",
@@ -55,14 +42,12 @@ POLICY = [
     "加班：工作日加班可换调休，周末加班按2倍工资或调休。",
 ]
 
-# 中文嵌入 + 向量库
 ef = embedding_functions.SentenceTransformerEmbeddingFunction(model_name="BAAI/bge-small-zh")
 import chromadb
 client = chromadb.Client()
 kb = client.create_collection(name="policy", embedding_function=ef)
 kb.add(documents=POLICY, ids=[f"p{i}" for i in range(len(POLICY))])
 
-# ---------- 2) 工具 ----------
 def get_current_time() -> str:
     return datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -106,13 +91,11 @@ while True:
         print("再见！")
         break
 
-    # 3) RAG：先检索相关资料，拼进这一轮的问题
     hits = kb.query(query_texts=[q], n_results=3)
     context = "\n".join(hits["documents"][0])
     augmented = f"【相关资料】\n{context}\n【用户问题】{q}"
     history.append({"role": "user", "content": augmented})
 
-    # 4) 多轮 + 工具调用循环（ReAct）
     for _ in range(5):
         resp = requests.post(
             "https://api.deepseek.com/chat/completions",
@@ -123,14 +106,14 @@ while True:
         msg = resp.json()["choices"][0]["message"]
         if msg.get("tool_calls"):
             print("助手: [调用工具]", flush=True)
-            history.append(msg)  # 原样存回，模型才知道自己要调什么
+            history.append(msg)                    
             for call in msg["tool_calls"]:
                 fn = call["function"]["name"]
                 args = json.loads(call["function"]["arguments"])
                 print(f"  -> {fn}({args})", flush=True)
                 result = TOOLS[fn](**args)
                 history.append({"role": "tool", "tool_call_id": call["id"], "content": str(result)})
-            continue  # 带着工具结果再生成
+            continue             
         print("助手:", msg["content"])
         history.append({"role": "assistant", "content": msg["content"]})
         break
